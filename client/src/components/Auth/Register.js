@@ -1,5 +1,6 @@
 import React from "react";
 import firebase from "../../firebase";
+import md5 from "md5";
 import {
   Grid,
   Form,
@@ -17,7 +18,9 @@ class Register extends React.Component {
     email: "",
     password: "",
     passwordConfirmation: "",
-    errors: []
+    errors: [],
+    loading: false,
+    usersRef: firebase.database().ref("users")
   };
 
   isFormValid = () => {
@@ -64,18 +67,55 @@ class Register extends React.Component {
   };
 
   handleSubmit = event => {
+    event.preventDefault();
     if (this.isFormValid()) {
-      event.preventDefault();
+      this.setState({ errors: [], loading: true });
       firebase
         .auth()
         .createUserWithEmailAndPassword(this.state.email, this.state.password)
         .then(createdUser => {
           console.log(createdUser);
+          createdUser.user
+            .updateProfile({
+              displayName: this.state.username,
+              photoURL: `http://gravatar.com/avatar/${md5(
+                createdUser.user.email
+              )}?d=identicon`
+            })
+            .then(() => {
+              this.saveUser(createdUser).then(() => {
+                console.log("user saved");
+              });
+            })
+            .catch(err => {
+              console.error(err);
+              this.setState({
+                errors: this.state.errors.concat(err),
+                loading: false
+              });
+            });
         })
         .catch(err => {
           console.error(err);
+          this.setState({
+            errors: this.state.errors.concat(err),
+            loading: false
+          });
         });
     }
+  };
+
+  saveUser = createdUser => {
+    return this.state.usersRef.child(createdUser.user.uid).set({
+      name: createdUser.user.displayName,
+      avatar: createdUser.user.photoURL
+    });
+  };
+
+  handleInputError = (errors, inputName) => {
+    return errors.some(error => error.message.toLowerCase().includes(inputName))
+      ? "error"
+      : "";
   };
 
   render() {
@@ -84,13 +124,14 @@ class Register extends React.Component {
       email,
       password,
       passwordConfirmation,
-      errors
+      errors,
+      loading
     } = this.state;
 
     return (
       <Grid textAlign="center" verticalAlign="middle" className="app">
         <Grid.Column style={{ maxWidth: 450 }}>
-          <Header as="h2" icon color="orange" textAlign="center">
+          <Header as="h1" icon color="orange" textAlign="center">
             <Icon name="puzzle piece" color="orange" />
             Register for DevChat
           </Header>
@@ -115,6 +156,7 @@ class Register extends React.Component {
                 placeholder="Email Address"
                 onChange={this.handleChange}
                 value={email}
+                className={this.handleInputError(errors, "email")}
                 type="email"
               />
 
@@ -126,6 +168,7 @@ class Register extends React.Component {
                 placeholder="Password"
                 onChange={this.handleChange}
                 value={password}
+                className={this.handleInputError(errors, "password")}
                 type="password"
               />
 
@@ -137,10 +180,17 @@ class Register extends React.Component {
                 placeholder="Password Confirmation"
                 onChange={this.handleChange}
                 value={passwordConfirmation}
+                className={this.handleInputError(errors, "password")}
                 type="password"
               />
 
-              <Button color="orange" fluid size="large">
+              <Button
+                disabled={loading}
+                className={loading ? "loading" : ""}
+                color="orange"
+                fluid
+                size="large"
+              >
                 Submit
               </Button>
             </Segment>
